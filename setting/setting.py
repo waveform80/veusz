@@ -1808,6 +1808,19 @@ class AlignVertWManual(Choice):
         """Make a copy of the setting."""
         return self._copyHelper((), (), {})
 
+class FillEdge(Choice):
+    """Choose an edge to fill to from one allowable."""
+
+    typename = 'fill-edge'
+
+    def __init__(self, name, value, **args):
+        Choice.__init__(self, name, ['left', 'top', 'right', 'bottom'],
+                value, **args)
+
+    def copy(self):
+        """Make a copy of the setting."""
+        return self._copyHelper((), (), {})
+
 # Bool which shows/hides other settings
 class BoolSwitch(Bool):
     """Bool switching setting."""

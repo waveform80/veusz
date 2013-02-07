@@ -244,6 +244,18 @@ class MarkerFillBrush(setting.Brush):
                 usertext = _('Invert map'),
                 formatting=True) )
 
+class PointFillBelow(setting.PointFill):
+    def __init__(self, name, **args):
+        setting.PointFill.__init__(self, name, **args)
+        edge = self.get('edge')
+        edge.newDefault('bottom')
+
+class PointFillAbove(setting.PointFill):
+    def __init__(self, name, **args):
+        setting.PointFill.__init__(self, name, **args)
+        edge = self.get('edge')
+        edge.newDefault('top')
+
 class ColorSettings(setting.Settings):
     """Settings for a coloring points using data values."""
 
@@ -343,14 +355,18 @@ class PointPlotter(GenericPlotter):
                                     descr = _('Error bar line settings'),
                                     usertext = _('Error bar line')),
                pixmap = 'settings_ploterrorline' )
-        s.add( setting.PointFill('FillBelow',
-                                 descr = _('Fill below plot line'),
-                                 usertext = _('Fill below')),
+        # XXX FillBelow and FillAbove are historical names. The two settings
+        # are now more akin to Fill1 and Fill2 in widgets.nonorthpoint but the
+        # names are allowed to persist for backward compatibility (there's no
+        # equivalent to SettingBackwardCompat for Settings derived classes)
+        s.add( PointFillBelow('FillBelow',
+                                 descr = _('Fill settings (1)'),
+                                 usertext = _('Area fill 1')),
                pixmap = 'settings_plotfillbelow' )
-        s.add( setting.PointFill('FillAbove',
-                                 descr = _('Fill above plot line'),
-                                 usertext = _('Fill above')),
-               pixmap = 'settings_plotfillabove' )
+        s.add( PointFillAbove('FillAbove',
+                                 descr = _('Fill settings (2)'),
+                                 usertext = _('Area fill 2')),
+               pixmap = 'settings_plotfillbelow' )
         s.add( setting.PointLabel('Label',
                                   descr = _('Label settings'),
                                   usertext=_('Label')),
@@ -521,17 +537,22 @@ class PointPlotter(GenericPlotter):
         path = self._getBezierLine(pts)
         s = self.settings
 
-        if not s.FillBelow.hide:
-            temppath = qt4.QPainterPath(path)
-            temppath.lineTo(pts[-1].x(), posn[3])
-            temppath.lineTo(pts[0].x(), posn[3])
-            utils.brushExtFillPath(painter, s.FillBelow, temppath)
-
-        if not s.FillAbove.hide:
-            temppath = qt4.QPainterPath(path)
-            temppath.lineTo(pts[-1].x(), posn[1])
-            temppath.lineTo(pts[0].x(), posn[1])
-            utils.brushExtFillPath(painter, s.FillAbove, temppath)
+        for fill in (s.FillBelow, s.FillAbove):
+            if not fill.hide:
+                temppath = qt4.QPainterPath(path)
+                temppath.lineTo({
+                    'bottom': qt4.QPointF(pts[-1].x(), posn[3]),
+                    'top':    qt4.QPointF(pts[-1].x(), posn[1]),
+                    'left':   qt4.QPointF(posn[0], pts[-1].y()),
+                    'right':  qt4.QPointF(posn[2], pts[-1].y()),
+                    }[fill.edge])
+                temppath.lineTo({
+                    'bottom': qt4.QPointF(pts[0].x(), posn[3]),
+                    'top':    qt4.QPointF(pts[0].x(), posn[1]),
+                    'left':   qt4.QPointF(posn[0], pts[0].y()),
+                    'right':  qt4.QPointF(posn[2], pts[0].y()),
+                    }[fill.edge])
+                utils.brushExtFillPath(painter, fill, temppath)
 
         if not s.PlotLine.hide:
             painter.strokePath(path, s.PlotLine.makeQPen(painter))
@@ -545,20 +566,22 @@ class PointPlotter(GenericPlotter):
             return
         s = self.settings
 
-        if not s.FillBelow.hide:
-            # construct polygon to draw filled region
-            polypts = qt4.QPolygonF([qt4.QPointF(pts[0].x(), posn[3])])
-            polypts += pts
-            polypts.append(qt4.QPointF(pts[len(pts)-1].x(), posn[3]))
-
-            utils.brushExtFillPolygon(painter, s.FillBelow, cliprect, polypts)
-
-        if not s.FillAbove.hide:
-            polypts = qt4.QPolygonF([qt4.QPointF(pts[0].x(), posn[1])])
-            polypts += pts
-            polypts.append(qt4.QPointF(pts[len(pts)-1].x(), posn[1]))
-
-            utils.brushExtFillPolygon(painter, s.FillAbove, cliprect, polypts)
+        for fill in (s.FillBelow, s.FillAbove):
+            if not fill.hide:
+                polypts = qt4.QPolygonF([{
+                    'bottom': qt4.QPointF(pts[0].x(), posn[3]),
+                    'top':    qt4.QPointF(pts[0].x(), posn[1]),
+                    'left':   qt4.QPointF(posn[0], pts[0].y()),
+                    'right':  qt4.QPointF(posn[2], pts[0].y()),
+                    }[fill.edge]])
+                polypts += pts
+                polypts.append({
+                    'bottom': qt4.QPointF(pts[-1].x(), posn[3]),
+                    'top':    qt4.QPointF(pts[-1].x(), posn[1]),
+                    'left':   qt4.QPointF(posn[0], pts[-1].y()),
+                    'right':  qt4.QPointF(posn[2], pts[-1].y()),
+                    }[fill.edge])
+                utils.brushExtFillPolygon(painter, fill, cliprect, polypts)
 
         # draw line between points
         if not s.PlotLine.hide:
@@ -778,7 +801,7 @@ class PointPlotter(GenericPlotter):
 
             #print "Painting plot line"
             # plot data line (and/or filling above or below)
-            if not s.PlotLine.hide or not s.FillAbove.hide or not s.FillBelow.hide:
+            if not (s.PlotLine.hide and s.FillAbove.hide and s.FillBelow.hide):
                 if s.PlotLine.bezierJoin and hasqtloops:
                     self._drawBezierLine( painter, xplotter, yplotter, posn,
                                           xvals, yvals )
