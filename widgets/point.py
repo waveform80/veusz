@@ -82,6 +82,9 @@ def _errorBarsBox(style, xmin, xmax, ymin, ymax, xplotter, yplotter,
 def _errorBarsBoxFilled(style, xmin, xmax, ymin, ymax, xplotter, yplotter,
                         s, painter, clip):
     """Draw box filled region inside error bars."""
+    print "_errorBarsBoxFilled"
+    print xplotter
+    print yplotter
     if None not in (xmin, xmax, ymin, ymax):
         # filled region below
         if not s.FillBelow.hideerror:
@@ -119,6 +122,9 @@ def _errorBarsDiamond(style, xmin, xmax, ymin, ymax, xplotter, yplotter,
 def _errorBarsDiamondFilled(style, xmin, xmax, ymin, ymax, xplotter, yplotter,
                             s, painter, clip):
     """Draw diamond filled region inside error bars."""
+    print "_errorBarsDiamondFilled"
+    print xplotter
+    print yplotter
     if None not in (xmin, xmax, ymin, ymax):
         if not s.FillBelow.hideerror:
             path = qt4.QPainterPath()
@@ -167,42 +173,33 @@ def _errorBarsFilled(style, xmin, xmax, ymin, ymax, xplotter, yplotter,
     ptsabove = qt4.QPolygonF()
     ptsbelow = qt4.QPolygonF()
 
-    hidevert = True  # keep track of what's shown
-    hidehorz = True
-    if ( 'vert' in style and
-         (ymin is not None and ymax is not None) and
-         not s.ErrorBarLine.hideVert ):
-        hidevert = False
-        # lines above/below points
-        utils.addNumpyToPolygonF(ptsbelow, xplotter, ymin)
-        utils.addNumpyToPolygonF(ptsabove, xplotter, ymax)
-
-    elif ( 'horz' in style and
-           (xmin is not None and xmax is not None) and
-           not s.ErrorBarLine.hideHorz ):
-        hidehorz = False
-        # lines left/right points
-        utils.addNumpyToPolygonF(ptsbelow, xmin, yplotter)
-        utils.addNumpyToPolygonF(ptsabove, xmax, yplotter)
-
-    # draw filled regions above/left and below/right
-    if 'fill' in style and not (hidehorz and hidevert):
-        # construct points for error bar regions
-        retnpts = qt4.QPolygonF()
-        utils.addNumpyToPolygonF(retnpts, xplotter[::-1], yplotter[::-1])
-
-        # polygons consist of lines joining the points and continuing
-        # back along the plot line (retnpts)
-        if not s.FillBelow.hideerror:
-            utils.brushExtFillPolygon(painter, s.FillBelow, clip,
-                                      ptsbelow+retnpts, ignorehide=True)
-        if not s.FillAbove.hideerror:
-            utils.brushExtFillPolygon(painter, s.FillAbove, clip,
-                                      ptsabove+retnpts, ignorehide=True)
-
-    # draw optional line (on top of fill)
-    utils.plotClippedPolyline(painter, clip, ptsabove)
-    utils.plotClippedPolyline(painter, clip, ptsbelow)
+    for orientation, edges, plotpts, minpts, maxpts, hideline in (
+            ('vert', ('top', 'bottom'), xplotter, ymin, ymax, s.ErrorBarLine.hideVert),
+            ('horz', ('left', 'right'), yplotter, xmin, xmax, s.ErrorBarLine.hideHorz) ):
+        if ( (orientation in style) and not hideline and
+                (minpts is not None) and (maxpts is not None) ):
+            utils.addNumpyToPolygonF(ptsbelow, plotpts, minpts)
+            utils.addNumpyToPolygonF(ptsabove, plotpts, maxpts)
+            if 'fill' in style:
+                retnpts = qt4.QPolygonF()
+                fillpts = {
+                    'top':    ptsabove,
+                    'left':   ptsabove,
+                    'bottom': ptsbelow,
+                    'right':  ptsbelow }
+                utils.addNumpyToPolygonF(retnpts,
+                                         xplotter[::-1], yplotter[::-1])
+                # See note in addSettings about names of FillAbove and
+                # FillBelow
+                for fill in (s.FillAbove, s.FillBelow):
+                    # polygons consist of lines joining the points and
+                    # continuing back along the plot line (retnpts)
+                    if not fill.hideerror:
+                        utils.brushExtFillPolygon(painter, fill, clip,
+                                                  fillpts[fill.edge]+retnpts,
+                                                  ignorehide=True)
+            utils.plotClippedPolyline(painter, clip, ptsabove)
+            utils.plotClippedPolyline(painter, clip, ptsbelow)
 
 # map error bar names to lists of functions (above)
 _errorBarFunctionMap = {
@@ -537,6 +534,7 @@ class PointPlotter(GenericPlotter):
         path = self._getBezierLine(pts)
         s = self.settings
 
+        # See note in addSettings about names of FillAbove and FillBelow
         for fill in (s.FillBelow, s.FillAbove):
             if not fill.hide:
                 temppath = qt4.QPainterPath(path)
